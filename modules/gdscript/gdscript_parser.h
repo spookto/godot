@@ -780,6 +780,13 @@ public:
 			members_indices[p_member_node->identifier->name] = members.size();
 			members.push_back(Member(p_member_node));
 		}
+#ifdef TOOLS_ENABLED
+		template <typename T>
+		void add_if_features_potential_candidate(T *p_member_node) {
+			p_member_node->if_features.potential_candidate_index = members.size();
+			members.push_back(Member(p_member_node));
+		}
+#endif
 		void add_member(const EnumNode::Value &p_enum_value) {
 			members_indices[p_enum_value.identifier->name] = members.size();
 			members.push_back(Member(p_enum_value));
@@ -856,6 +863,12 @@ public:
 		Vector<Variant> default_arg_values;
 #ifdef TOOLS_ENABLED
 		MemberDocData doc_data;
+		int min_local_doc_line = 0;
+		struct {
+			bool used = false;
+			bool is_default_impl = false;
+			int potential_candidate_index = -1;
+		} if_features;
 #endif // TOOLS_ENABLED
 
 		bool resolved_signature = false;
@@ -1329,6 +1342,10 @@ private:
 	bool _is_tool = false;
 	String script_path;
 	bool for_completion = false;
+#ifdef TOOLS_ENABLED
+	bool for_export = false;
+	HashSet<String> export_features;
+#endif
 	bool parse_body = true;
 	bool panic_mode = false;
 	bool can_break = false;
@@ -1505,6 +1522,7 @@ private:
 	bool warning_annotations(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class);
 	bool rpc_annotation(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class);
 	bool static_unload_annotation(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class);
+	bool if_features_annotation(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class);
 	// Statements.
 	Node *parse_statement();
 	VariableNode *parse_variable(bool p_is_static);
@@ -1575,6 +1593,15 @@ public:
 	CompletionCall get_completion_call() const { return completion_call; }
 	void get_annotation_list(List<MethodInfo> *r_annotations) const;
 	bool annotation_exists(const String &p_annotation_name) const;
+
+#ifdef TOOLS_ENABLED
+	bool is_for_export() const { return for_export; }
+	void set_export_features(const HashSet<String> &p_features) {
+		for_export = true;
+		export_features = p_features;
+	}
+	void collect_unfitting_functions(ClassNode *p_class, LocalVector<Pair<ClassNode *, FunctionNode *>> &r_functions);
+#endif
 
 	const List<ParserError> &get_errors() const { return errors; }
 	const List<String> get_dependencies() const {

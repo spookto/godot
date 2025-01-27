@@ -37,6 +37,8 @@
 #include "gdscript_utility_functions.h"
 
 #ifdef TOOLS_ENABLED
+#include "editor/export/editor_export.h"
+#include "editor/gdscript_docgen.h"
 #include "editor/script_templates/templates.gen.h"
 #endif
 
@@ -948,6 +950,26 @@ static void _find_annotation_arguments(const GDScriptParser::AnnotationNode *p_a
 				r_result.insert(option.display, option);
 			}
 		}
+	} else if (p_annotation->name == SNAME("@if_features")) {
+#ifdef TOOLS_ENABLED
+		HashSet<String> features;
+		for (int i = 0; i < EditorExport::get_singleton()->get_export_preset_count(); i++) {
+			const Ref<EditorExportPreset> &preset = EditorExport::get_singleton()->get_export_preset(i);
+			for (const String &feature : preset->get_custom_features().split(",", false)) {
+				features.insert(feature.strip_edges());
+			}
+			List<String> platform_features;
+			preset->get_platform()->get_platform_features(&platform_features);
+			for (const String &feature : platform_features) {
+				features.insert(feature.strip_edges());
+			}
+		}
+		for (const String &feature : features) {
+			ScriptLanguage::CodeCompletionOption option(feature, ScriptLanguage::CODE_COMPLETION_KIND_PLAIN_TEXT);
+			option.insert_text = option.display.quote(p_quote_style);
+			r_result.insert(option.display, option);
+		}
+#endif
 	}
 }
 

@@ -130,6 +130,8 @@ GDScriptParser::GDScriptParser() {
 		register_annotation(MethodInfo("@warning_ignore", PropertyInfo(Variant::STRING, "warning")), AnnotationInfo::CLASS_LEVEL | AnnotationInfo::STATEMENT, &GDScriptParser::warning_annotations, varray(), true);
 		// Networking.
 		register_annotation(MethodInfo("@rpc", PropertyInfo(Variant::STRING, "mode"), PropertyInfo(Variant::STRING, "sync"), PropertyInfo(Variant::STRING, "transfer_mode"), PropertyInfo(Variant::INT, "transfer_channel")), AnnotationInfo::FUNCTION, &GDScriptParser::rpc_annotation, varray("authority", "call_remote", "unreliable", 0));
+		// Preprocessing.
+		register_annotation(MethodInfo("@if_features", PropertyInfo(Variant::STRING, "feature")), AnnotationInfo::FUNCTION, &GDScriptParser::if_features_annotation, varray(Variant()), true);
 	}
 
 #ifdef DEBUG_ENABLED
@@ -895,11 +897,22 @@ void GDScriptParser::parse_class_member(T *(GDScriptParser::*p_parse_function)(b
 
 	// Consume annotations.
 	List<AnnotationNode *> annotations;
+#ifdef TOOLS_ENABLED
+	constexpr bool parsing_function = std::is_same_v<T, FunctionNode>;
+	AnnotationNode *îf_features = nullptr;
+#endif
 	while (!annotation_stack.is_empty()) {
 		AnnotationNode *last_annotation = annotation_stack.back()->get();
 		if (last_annotation->applies_to(p_target)) {
 			annotations.push_front(last_annotation);
 			annotation_stack.pop_back();
+#ifdef TOOLS_ENABLED
+			if constexpr (parsing_function) {
+				if (last_annotation->name == StringName("@if_features")) {
+					îf_features = last_annotation;
+				}
+			}
+#endif
 		} else {
 			push_error(vformat(R"(Annotation "%s" cannot be applied to a %s.)", last_annotation->name, p_member_kind));
 			clear_unused_annotations();
@@ -945,6 +958,19 @@ void GDScriptParser::parse_class_member(T *(GDScriptParser::*p_parse_function)(b
 	}
 
 	min_member_doc_line = member->end_line + 1; // Prevent multiple members from using the same doc comment.
+
+	if constexpr (parsing_function) {
+		if (îf_features) {
+			// Mark this one as a default implementation if the annotation provides no features.
+			member->if_features.is_default_impl = îf_features->arguments.is_empty();
+			// Let the first default one with of same name fully in.
+			// The others are added so they are parsed, but not indexed so name clash error is avoided.
+			if (!member->if_features.is_default_impl || current_class->members_indices.has(member->identifier->name)) {
+				current_class->add_if_features_potential_candidate(member);
+				return;
+			}
+		}
+	}
 #endif // TOOLS_ENABLED
 
 	if (member->identifier != nullptr) {
@@ -4635,6 +4661,95 @@ bool GDScriptParser::warning_annotations(const AnnotationNode *p_annotation, Nod
 	return !has_error;
 #endif // DEBUG_ENABLED
 }
+
+bool GDScriptParser::if_features_annotation(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class) {
+#if defined(TOOLS_ENABLED)
+	ERR_FAIL_COND_V_MSG(p_target->type != Node::FUNCTION, false, vformat(R"("%s" annotation can only be applied to functions.)", p_annotation->name));
+
+	FunctionNode *function = static_cast<FunctionNode *>(p_target);
+	if (function->if_features.used) {
+		push_error("The @if_features annotation can only be used once per function.");
+		return false;
+	}
+
+	function->if_features.used = true;
+
+	thread_local LocalVector<String> features;
+	features.clear();
+	for (const ExpressionNode *arg : p_annotation->arguments) {
+		DEV_ASSERT(arg->reduced);
+		if (arg->reduced_value.get_type() == Variant::STRING) {
+			features.push_back(arg->reduced_value);
+		} else {
+			push_error("The arguments to @if_features must be strings.");
+			return false;
+		}
+	}
+
+	if (Engine::get_singleton()->is_editor_hint() && !for_export) {
+		// At edit time there's nothing else to process.
+		return true;
+	}
+
+	// The idea is to keep the first one fitting, with only the default possibly overridden by another one coming later.
+
+	FunctionNode *target_function = static_cast<FunctionNode *>(p_target);
+	const StringName &function_name = target_function->identifier->name;
+
+	bool current_match_overridable = false;
+	if (target_function->if_features.potential_candidate_index != -1) { // Otherwise, it's already the chosen one when parsing the function.
+		if (p_class->has_function(function_name)) {
+			bool current_match_is_default = p_class->get_member(function_name).function->if_features.is_default_impl;
+			bool incoming_candidate_is_default = target_function->if_features.is_default_impl;
+			current_match_overridable = current_match_is_default && !incoming_candidate_is_default;
+		}
+	}
+
+	if (current_match_overridable) {
+		bool fitting = false;
+		if (features.size()) {
+			fitting = true;
+			for (const String &feature : features) {
+				if (for_export) {
+					// Export time in editor build.
+					if (!export_features.has(feature)) {
+						fitting = false;
+						break;
+					}
+				} else {
+					// Runtime in editor build.
+					if (!OS::get_singleton()->has_feature(feature)) {
+						fitting = false;
+						break;
+					}
+				}
+			}
+		}
+		if (fitting) {
+			// If fits, replace the current match.
+			int64_t current_match_index = p_class->members_indices[function_name];
+			p_class->members[current_match_index].function->if_features.potential_candidate_index = current_match_index;
+			p_class->members_indices[function_name] = target_function->if_features.potential_candidate_index;
+			target_function->if_features.potential_candidate_index = -1;
+		}
+	}
+#endif
+
+	return true;
+}
+
+#ifdef TOOLS_ENABLED
+void GDScriptParser::collect_unfitting_functions(ClassNode *p_class, LocalVector<Pair<ClassNode *, FunctionNode *>> &r_functions) {
+	for (const ClassNode::Member &member : p_class->members) {
+		if (member.type == ClassNode::Member::CLASS) {
+			collect_unfitting_functions(member.m_class, r_functions);
+		}
+		if (member.type == ClassNode::Member::FUNCTION && member.function->if_features.potential_candidate_index != -1) {
+			r_functions.push_back(Pair(p_class, member.function));
+		}
+	}
+}
+#endif
 
 bool GDScriptParser::rpc_annotation(const AnnotationNode *p_annotation, Node *p_target, ClassNode *p_class) {
 	ERR_FAIL_COND_V_MSG(p_target->type != Node::FUNCTION, false, vformat(R"("%s" annotation can only be applied to functions.)", p_annotation->name));
