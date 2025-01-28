@@ -151,7 +151,8 @@ uint trace_ray(vec3 p_from, vec3 p_to, bool p_any_hit, out float r_distance, out
 	vec3 dir_cell = normalize(rel_cell);
 	vec3 delta = min(abs(1.0 / dir_cell), bake_params.grid_size); // Use bake_params.grid_size as max to prevent infinity values.
 	ivec3 step = ivec3(sign(rel_cell));
-	vec3 side = (sign(rel_cell) * (vec3(icell) - from_cell) + (sign(rel_cell) * 0.5) + 0.5) * delta;
+	const vec3 init_next_cell = vec3(icell) + max(vec3(0), sign(step));
+	vec3 t_max = mix(vec3(0), (init_next_cell - from_cell) / dir_cell, notEqual(step, vec3(0))); // Distance to next boundary.
 
 	uint iters = 0;
 	while (all(greaterThanEqual(icell, ivec3(0))) && all(lessThan(icell, ivec3(bake_params.grid_size))) && (iters < 1000)) {
@@ -279,17 +280,16 @@ uint trace_ray(vec3 p_from, vec3 p_to, bool p_any_hit, out float r_distance, out
 		}
 
 		// There should be only one axis updated at a time for DDA to work properly.
-		bvec3 mask = bvec3(true, false, false);
-		float m = side.x;
-		if (side.y < m) {
-			m = side.y;
-			mask = bvec3(false, true, false);
+		if (t_max.x < t_max.y && t_max.x < t_max.z) {
+			icell.x += step.x;
+			t_max.x += delta.x;
+		} else if (t_max.y < t_max.z) {
+			icell.y += step.y;
+			t_max.y += delta.y;
+		} else {
+			icell.z += step.z;
+			t_max.z += delta.z;
 		}
-		if (side.z < m) {
-			mask = bvec3(false, false, true);
-		}
-		side += vec3(mask) * delta;
-		icell += ivec3(vec3(mask)) * step;
 		iters++;
 	}
 
