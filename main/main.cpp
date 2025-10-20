@@ -4730,6 +4730,11 @@ int Main::start() {
 
 	GDExtensionManager::get_singleton()->startup();
 
+	if (EngineDebugger::is_active()) {
+		// Mark all of resources had been loaded, now can use debug
+		EngineDebugger::get_singleton()->mark_started();
+	}
+
 #ifdef MACOS_ENABLED
 	// TODO: Used to fix full-screen splash drawing on macOS, processing events before main loop is fully initialized cause issues on Wayland, and has no effect on other platforms.
 	if (minimum_time_msec) {
