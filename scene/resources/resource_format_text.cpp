@@ -1919,7 +1919,7 @@ Error ResourceFormatSaverTextInstance::save(const String &p_path, const Ref<Reso
 						long_name += "_" + itos(attempt);
 					}
 
-					new_id = Resource::generate_consistent_scene_unique_id(long_name);
+					new_id = _resource_get_class(res) + "_" + Resource::generate_consistent_scene_unique_id(long_name);
 
 					if (!used_unique_ids.has(new_id)) {
 						break;
