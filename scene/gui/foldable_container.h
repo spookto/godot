@@ -61,6 +61,7 @@ private:
 	mutable Vector2 title_minimum_size;
 
 	LocalVector<Control *> title_controls;
+	LocalVector<bool> title_controls_left;
 
 	struct ThemeCache {
 		Ref<StyleBox> title_style;
@@ -91,7 +92,7 @@ private:
 	Ref<Texture2D> _get_title_icon() const;
 	Rect2 _get_title_rect() const;
 	int _get_h_separation() const { return MAX(theme_cache.h_separation, 0); }
-	real_t _get_title_controls_width() const;
+	real_t _get_title_controls_width(bool left) const;
 
 	void _update_title_min_size() const;
 	void _shape();
@@ -135,6 +136,7 @@ public:
 	TitlePosition get_title_position() const;
 
 	void add_title_bar_control(Control *p_control);
+	void add_title_bar_control_left(Control *p_control);
 	void remove_title_bar_control(Control *p_control);
 
 	virtual Size2 get_minimum_size() const override;

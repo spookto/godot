@@ -203,6 +203,12 @@ void FoldableContainer::add_title_bar_control(Control *p_control) {
 	}
 	add_child(p_control, false, INTERNAL_MODE_FRONT);
 	title_controls.push_back(p_control);
+	title_controls_left.push_back(false);
+}
+
+void FoldableContainer::add_title_bar_control_left(Control *p_control) {
+	add_title_bar_control(p_control);
+	title_controls_left[title_controls_left.size() - 1] = true;
 }
 
 void FoldableContainer::remove_title_bar_control(Control *p_control) {
@@ -212,6 +218,7 @@ void FoldableContainer::remove_title_bar_control(Control *p_control) {
 	ERR_FAIL_COND_MSG(index == -1, "Can't remove control from title bar.");
 
 	title_controls.remove_at(index);
+	title_controls_left.remove_at(index);
 	remove_child(p_control);
 }
 
@@ -273,9 +280,13 @@ void FoldableContainer::_notification(int p_what) {
 			Ref<StyleBox> title_style = _get_title_style();
 			Ref<Texture2D> icon = _get_title_icon();
 
-			real_t title_controls_width = _get_title_controls_width();
+			real_t title_controls_width = _get_title_controls_width(false);
 			if (title_controls_width > 0) {
 				title_controls_width += h_separation;
+			}
+			real_t title_controls_left_width = _get_title_controls_width(true);
+			if (title_controls_left_width > 0) {
+				title_controls_left_width += h_separation;
 			}
 
 			const Rect2 title_rect = _get_title_rect();
@@ -288,7 +299,7 @@ void FoldableContainer::_notification(int p_what) {
 			Point2 title_text_pos(title_style->get_margin(SIDE_LEFT), title_style_ofs);
 			title_text_pos.y += MAX((title_minimum_size.height - title_ms.height - text_buf->get_size().height) * 0.5, 0);
 
-			title_text_width -= icon->get_width() + h_separation + title_controls_width;
+			title_text_width -= icon->get_width() + h_separation + title_controls_width + title_controls_left_width;
 			Point2 icon_pos(0, MAX((title_minimum_size.height - title_ms.height - icon->get_height()) * 0.5, 0) + title_style_ofs);
 
 			bool rtl = is_layout_rtl();
@@ -297,7 +308,7 @@ void FoldableContainer::_notification(int p_what) {
 				title_text_pos.x += title_controls_width;
 			} else {
 				icon_pos.x = title_style->get_margin(SIDE_LEFT);
-				title_text_pos.x += icon->get_width() + h_separation;
+				title_text_pos.x += icon->get_width() + h_separation + title_controls_left_width;
 			}
 			icon->draw(ci, title_rect.position + icon_pos);
 
@@ -331,16 +342,21 @@ void FoldableContainer::_notification(int p_what) {
 			bool rtl = is_layout_rtl();
 			const Vector2 size = get_size();
 			const Ref<StyleBox> title_style = _get_title_style();
+			Ref<Texture2D> icon = _get_title_icon();
 
 			uint32_t title_count = title_controls.size();
 			if (title_count > 0) {
 				int h_separation = MAX(theme_cache.h_separation, 0);
 				real_t offset = 0.0;
+				real_t left_offset = 0.0;
 				if (rtl) {
 					offset = title_style->get_margin(SIDE_LEFT);
+					left_offset = _get_title_controls_width(true) + icon->get_width() + h_separation;
+					left_offset = size.x - title_style->get_margin(SIDE_RIGHT) - left_offset;
 				} else {
-					offset = _get_title_controls_width();
+					offset = _get_title_controls_width(false);
 					offset = size.x - title_style->get_margin(SIDE_RIGHT) - offset;
+					left_offset = title_style->get_margin(SIDE_LEFT) + icon->get_width() + h_separation;
 				}
 
 				real_t v_center = title_minimum_size.y * 0.5;
@@ -351,16 +367,25 @@ void FoldableContainer::_notification(int p_what) {
 				}
 
 				for (uint32_t i = 0; i < title_count; i++) {
-					Control *control = title_controls[rtl ? title_count - i - 1 : i];
+					int index = rtl ? title_count - i - 1 : i;
+					Control *control = title_controls[index];
 					if (!control->is_visible()) {
 						continue;
 					}
 					Rect2 rect(Vector2(), control->get_combined_minimum_size());
-					rect.position.x = offset;
-					rect.position.y = v_center - rect.size.y * 0.5;
-					fit_child_in_rect(control, rect);
+					if (title_controls_left[index] == true) {
+						rect.position.x = left_offset;
+						rect.position.y = v_center - rect.size.y * 0.5;
+						fit_child_in_rect(control, rect);
 
-					offset += rect.size.x + h_separation;
+						left_offset += rect.size.x + h_separation;
+					} else {
+						rect.position.x = offset;
+						rect.position.y = v_center - rect.size.y * 0.5;
+						fit_child_in_rect(control, rect);
+
+						offset += rect.size.x + h_separation;
+					}
 				}
 			}
 
@@ -404,12 +429,12 @@ void FoldableContainer::_notification(int p_what) {
 	}
 }
 
-real_t FoldableContainer::_get_title_controls_width() const {
+real_t FoldableContainer::_get_title_controls_width(bool left) const {
 	real_t width = 0.0;
 	int visible_controls = 0;
-	for (const Control *control : title_controls) {
-		if (control->is_visible()) {
-			width += control->get_combined_minimum_size().x;
+	for (uint32_t i = 0; i < title_controls.size(); i++) {
+		if (title_controls[i]->is_visible() && title_controls_left[i] == left) {
+			width += title_controls[i]->get_combined_minimum_size().x;
 			visible_controls++;
 		}
 	}
@@ -552,6 +577,7 @@ void FoldableContainer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_title_position", "title_position"), &FoldableContainer::set_title_position);
 	ClassDB::bind_method(D_METHOD("get_title_position"), &FoldableContainer::get_title_position);
 	ClassDB::bind_method(D_METHOD("add_title_bar_control", "control"), &FoldableContainer::add_title_bar_control);
+	ClassDB::bind_method(D_METHOD("add_title_bar_control_left", "control"), &FoldableContainer::add_title_bar_control_left);
 	ClassDB::bind_method(D_METHOD("remove_title_bar_control", "control"), &FoldableContainer::remove_title_bar_control);
 
 	ADD_SIGNAL(MethodInfo("folding_changed", PropertyInfo(Variant::BOOL, "is_folded")));
