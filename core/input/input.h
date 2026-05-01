@@ -149,6 +149,7 @@ private:
 	bool emulate_mouse_from_touch = false;
 	bool agile_input_event_flushing = false;
 	bool use_accumulated_input = true;
+	bool joypads_enabled = true;
 
 	int mouse_from_touch_index = -1;
 
@@ -419,6 +420,8 @@ public:
 	void set_agile_input_event_flushing(bool p_enable);
 	void set_use_accumulated_input(bool p_enable);
 	bool is_using_accumulated_input();
+	void set_joypads_enabled(bool p_enable);
+	bool is_joypads_enabled();
 
 	void release_pressed_events();
 
