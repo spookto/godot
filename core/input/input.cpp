@@ -169,6 +169,8 @@ void Input::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("parse_input_event", "event"), &Input::parse_input_event);
 	ClassDB::bind_method(D_METHOD("set_use_accumulated_input", "enable"), &Input::set_use_accumulated_input);
 	ClassDB::bind_method(D_METHOD("is_using_accumulated_input"), &Input::is_using_accumulated_input);
+	ClassDB::bind_method(D_METHOD("set_joypads_enabled", "enable"), &Input::set_joypads_enabled);
+	ClassDB::bind_method(D_METHOD("is_joypads_enabled"), &Input::is_joypads_enabled);
 	ClassDB::bind_method(D_METHOD("flush_buffered_events"), &Input::flush_buffered_events);
 	ClassDB::bind_method(D_METHOD("set_emulate_mouse_from_touch", "enable"), &Input::set_emulate_mouse_from_touch);
 	ClassDB::bind_method(D_METHOD("is_emulating_mouse_from_touch"), &Input::is_emulating_mouse_from_touch);
@@ -177,6 +179,7 @@ void Input::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mouse_mode"), "set_mouse_mode", "get_mouse_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_accumulated_input"), "set_use_accumulated_input", "is_using_accumulated_input");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "joypads_enabled"), "set_joypads_enabled", "is_joypads_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emulate_mouse_from_touch"), "set_emulate_mouse_from_touch", "is_emulating_mouse_from_touch");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emulate_touch_from_mouse"), "set_emulate_touch_from_mouse", "is_emulating_touch_from_mouse");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ignore_joypad_on_unfocused_application"), "set_ignore_joypad_on_unfocused_application", "is_ignoring_joypad_on_unfocused_application");
@@ -360,7 +363,7 @@ bool Input::is_mouse_button_pressed(MouseButton p_button) const {
 }
 
 bool Input::_should_ignore_joypad_events() const {
-	return ignore_joypad_on_unfocused_application && !application_focused && !embedder_focused;
+	return (ignore_joypad_on_unfocused_application && !application_focused && !embedder_focused) || !joypads_enabled;
 }
 
 static JoyAxis _combine_device(JoyAxis p_value, int p_device) {
@@ -1340,6 +1343,17 @@ bool Input::is_using_accumulated_input() {
 	return use_accumulated_input;
 }
 
+void Input::set_joypads_enabled(bool p_enable) {
+	joypads_enabled = p_enable;
+	if (!joypads_enabled) {
+		release_pressed_events();
+	}
+}
+
+bool Input::is_joypads_enabled() {
+	return joypads_enabled;
+}
+
 void Input::release_pressed_events() {
 	// Don't release the events if the application (or the window it's embedded in) is still focused.
 	if (application_focused || embedder_focused) {
@@ -2081,6 +2095,7 @@ Input::Input() {
 	gyroscope_enabled = GLOBAL_DEF_RST_BASIC("input_devices/sensors/enable_gyroscope", false);
 	magnetometer_enabled = GLOBAL_DEF_RST_BASIC("input_devices/sensors/enable_magnetometer", false);
 	ignore_joypad_on_unfocused_application = GLOBAL_DEF_RST_BASIC("input_devices/joypads/ignore_joypad_on_unfocused_application", false);
+	joypads_enabled = GLOBAL_DEF_BASIC("input_devices/joypads/joypads_enabled", true);
 }
 
 Input::~Input() {
