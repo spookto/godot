@@ -987,6 +987,8 @@ Patches:
 - `0004-errno-include.patch` ([GH-108354](https://github.com/godotengine/godot/pull/108354))
 - `0005-fix-libudev-dbus.patch` ([GH-108373](https://github.com/godotengine/godot/pull/108373))
 - `0006-fix-cs-environ.patch` ([GH-109283](https://github.com/godotengine/godot/pull/109283))
+- `0008-fix-linux-joycon-serial-num.patch` ([GH-113873](https://github.com/godotengine/godot/pull/113873))
+- `0009-update-device-blocklist.patch` ([GH-119403](https://github.com/godotengine/godot/pull/119403))
 
 
 ## spirv-cross
