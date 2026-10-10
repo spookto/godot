@@ -276,6 +276,21 @@ Ref<Resource> ShaderBakerExportPlugin::_customize_resource(const Ref<Resource> &
 	RendererRD::MaterialStorage *singleton = RendererRD::MaterialStorage::get_singleton();
 	DEV_ASSERT(singleton != nullptr);
 
+	Ref<Shader> shader = p_resource;
+	if (shader.is_valid()) {
+		RID shader_rid = shader->get_rid();
+		if (shader_rid.is_valid()) {
+			RendererRD::MaterialStorage::ShaderData *shader_data = singleton->shader_get_data(shader_rid);
+			if (shader_data != nullptr) {
+				Pair<ShaderRD *, RID> shader_version_pair = shader_data->get_native_shader_and_version();
+				if (shader_version_pair.first != nullptr) {
+					_customize_shader_version(shader_version_pair.first, shader_version_pair.second);
+				}
+			}
+		}
+		return Ref<Resource>();
+	}
+
 	Ref<Material> material = p_resource;
 	if (material.is_valid()) {
 		RID material_rid = material->get_rid();
