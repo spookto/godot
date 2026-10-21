@@ -3457,6 +3457,42 @@ Error ResourceImporterScene::import(ResourceUID::ID p_source_id, const String &p
 	}
 	err = OK;
 
+	// Generate deterministic unique node IDs.
+	if (_scene_import_type == "PackedScene") {
+		uint32_t unique_scene_id = Node::UNIQUE_SCENE_ID_UNASSIGNED;
+
+		LocalVector<Node *> nodes_to_give_id;
+		LocalVector<uint32_t> ids_saved;
+
+		nodes_to_give_id.push_back(scene);
+
+		while (!nodes_to_give_id.is_empty()) {
+			Node *node = nodes_to_give_id[nodes_to_give_id.size() - 1];
+			nodes_to_give_id.remove_at(nodes_to_give_id.size() - 1);
+			String id_path = p_save_path + String(scene->get_path_to(node));
+			while (true) {
+				uint32_t data = ResourceUID::get_singleton()->create_id_for_path(id_path);
+				unique_scene_id = data & 0x7FFFFFFF; // keep positive.
+
+				if (unique_scene_id == Node::UNIQUE_SCENE_ID_UNASSIGNED) {
+					unique_scene_id = 1;
+				}
+				if (ids_saved.has(unique_scene_id)) {
+					id_path = id_path + "0"; // Dumb idea of adding a random character to randomize hash
+					continue;
+				}
+				break;
+			}
+			node->set_unique_scene_id(unique_scene_id);
+
+			// Visit children.
+			int child_count = node->get_child_count();
+			for (int i = 0; i < child_count; i++) {
+				nodes_to_give_id.push_back(node->get_child(i));
+			}
+		}
+	}
+
 	progress.step(TTR("Running Custom Script..."), 2);
 
 	String post_import_script_path = p_options["import_script/path"];
