@@ -178,6 +178,7 @@ void JoypadSDL::process_events() {
 				joypad_info["raw_name"] = String::utf8(SDL_GetJoystickName(joy));
 				joypad_info["vendor_id"] = itos(SDL_GetJoystickVendor(joy));
 				joypad_info["product_id"] = itos(SDL_GetJoystickProduct(joy));
+				joypad_info["gamepad_type"] = itos(SDL_GetGamepadType(gamepad));
 
 				const uint64_t steam_handle = SDL_GetGamepadSteamHandle(gamepad);
 				if (steam_handle != 0) {
